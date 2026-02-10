@@ -1,0 +1,38 @@
+[Unit]
+Description=FastCGI wrapper for WireGuard Monitor
+After=network.target nss-user-lookup.target
+Requires=nginx.service
+
+[Service]
+Type=forking
+User=wg-monitor
+Group=wg-monitor
+ExecStart=/usr/sbin/fcgiwrap -f -c 4 -s unix:/var/run/fcgiwrap.socket
+ExecReload=/bin/kill -HUP $MAINPID
+PIDFile=/var/run/fcgiwrap.pid
+Restart=on-failure
+RestartSec=5s
+
+# Ограничения ресурсов
+MemoryLimit=100M
+CPUQuota=50%
+IOWeight=100
+
+# Логирование
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wg-monitor-fcgi
+
+# Окружение
+Environment="WG_MONITOR_HOME=/var/www/wg-monitor"
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+
+# Безопасность
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/cache/wg-monitor /var/log/wg-monitor
+ReadOnlyPaths=/var/www/wg-monitor /etc/wireguard
+
+[Install]
+WantedBy=multi-user.target

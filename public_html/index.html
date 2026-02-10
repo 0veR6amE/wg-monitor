@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WireGuard VPN Monitor</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-shield-alt"></i> WireGuard VPN Monitor</h1>
+            <div class="server-info">
+                <span id="server-time">Загрузка...</span>
+                <button onclick="location.reload()"><i class="fas fa-sync-alt"></i> Обновить</button>
+            </div>
+        </header>
+
+        <div class="dashboard">
+            <!-- Секция общего трафика -->
+            <section class="card">
+                <h2><i class="fas fa-chart-line"></i> Общий трафик сервера</h2>
+                <div class="traffic-controls">
+                    <button class="period-btn active" data-period="today">Сегодня</button>
+                    <button class="period-btn" data-period="month">Этот месяц</button>
+                    <button class="period-btn" data-period="lastmonth">Прошлый месяц</button>
+                </div>
+                <div class="traffic-stats">
+                    <div class="stat">
+                        <span class="stat-label">Получено (RX):</span>
+                        <span class="stat-value" id="traffic-rx">0 B</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Отправлено (TX):</span>
+                        <span class="stat-value" id="traffic-tx">0 B</span>
+                    </div>
+                </div>
+                <canvas id="trafficChart" width="400" height="200"></canvas>
+            </section>
+
+            <!-- Секция клиентов -->
+            <section class="card wide">
+                <h2><i class="fas fa-users"></i> Подключенные клиенты</h2>
+                <div class="table-controls">
+                    <input type="text" id="client-search" placeholder="Поиск клиентов...">
+                    <select id="sort-by">
+                        <option value="name">Имя</option>
+                        <option value="traffic">Трафик</option>
+                        <option value="last_handshake">Последняя активность</option>
+                    </select>
+                </div>
+                <div class="table-container">
+                    <table id="clients-table">
+                        <thead>
+                            <tr>
+                                <th data-sort="name">Имя устройства <i class="fas fa-sort"></i></th>
+                                <th data-sort="public_key">Публичный ключ <i class="fas fa-sort"></i></th>
+                                <th data-sort="ip">IP-адрес <i class="fas fa-sort"></i></th>
+                                <th data-sort="last_handshake">Последняя активность <i class="fas fa-sort"></i></th>
+                                <th data-sort="transfer_rx_raw">Получено (RX) <i class="fas fa-sort"></i></th>
+                                <th data-sort="transfer_tx_raw">Отправлено (TX) <i class="fas fa-sort"></i></th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clients-tbody">
+                            <!-- Данные загружаются через JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-footer">
+                    <span id="client-count">0 клиентов</span>
+                    <span class="update-info">Обновляется каждые 30 секунд</span>
+                </div>
+            </section>
+
+            <!-- Секция диагностики -->
+            <section class="card">
+                <h2><i class="fas fa-network-wired"></i> Диагностика сети</h2>
+                
+                <div class="ping-section">
+                    <h3><i class="fas fa-server"></i> Пинг с сервера до клиента</h3>
+                    <div class="ping-controls">
+                        <select id="ping-client-select">
+                            <option value="">Выберите клиента...</option>
+                        </select>
+                        <button id="ping-btn" class="btn-primary">
+                            <i class="fas fa-play"></i> Выполнить пинг
+                        </button>
+                    </div>
+                    <div class="ping-result">
+                        <pre id="ping-output"></pre>
+                    </div>
+                </div>
+
+                <div class="ping-section">
+                    <h3><i class="fas fa-desktop"></i> Пинг с клиента до сервера</h3>
+                    <p>Для проверки связи с клиента, выполните команду на устройстве клиента:</p>
+                    <div class="command-box">
+                        <code id="ping-command">ping 10.0.0.1</code>
+                        <button onclick="copyCommand()" class="btn-copy">
+                            <i class="far fa-copy"></i> Копировать
+                        </button>
+                    </div>
+                    <p class="note"><i class="fas fa-info-circle"></i> Замените IP-адрес на внутренний IP вашего сервера WireGuard</p>
+                </div>
+            </section>
+			<section class="card">
+				<h2><i class="fas fa-database"></i> Статус кэширования</h2>
+				<div class="cache-stats">
+					<div class="stat">
+						<span class="stat-label">Hit Rate:</span>
+						<span class="stat-value" id="cache-hit-rate">0%</span>
+					</div>
+					<div class="stat">
+						<span class="stat-label">Размер кэша:</span>
+						<span class="stat-value" id="cache-size">0 B</span>
+					</div>
+					<div class="stat">
+						<span class="stat-label">Файлов в кэше:</span>
+						<span class="stat-value" id="cache-files">0</span>
+					</div>
+				</div>
+				<div class="cache-controls">
+					<button id="clear-cache-btn" class="btn-warning">
+						<i class="fas fa-trash"></i> Очистить кэш
+					</button>
+					<button onclick="cacheManager.loadStats()" class="btn-secondary">
+						<i class="fas fa-sync-alt"></i> Обновить
+					</button>
+				</div>
+				<div class="cache-details">
+					<h4>Детализация:</h4>
+					<ul>
+						<li>Попадания: <span id="cache-hits">0</span></li>
+						<li>Промахи: <span id="cache-misses">0</span></li>
+						<li>Трафик: <span id="cache-traffic-files">0</span> файлов</li>
+						<li>Клиенты: <span id="cache-clients-files">0</span> файлов</li>
+						<li>Ping: <span id="cache-ping-files">0</span> файлов</li>
+					</ul>
+				</div>
+			</section>
+        </div>
+        <footer>
+            <p>WireGuard Monitor v1.0 | <span id="last-update">Обновлено: --:--:--</span></p>
+        </footer>
+    </div>
+
+    <!-- Модальное окно для подробной информации -->
+    <div id="client-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>Детальная информация о клиенте</h3>
+            <div id="client-details"></div>
+        </div>
+    </div>
+
+    <script src="/js/script.js"></script>
+</body>
+</html>

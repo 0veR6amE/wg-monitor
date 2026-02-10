@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WireGuard Monitor Lite</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: monospace; background: #f0f0f0; padding: 10px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        header { background: #333; color: white; padding: 10px; margin-bottom: 10px; }
+        .card { background: white; border: 1px solid #ddd; margin: 10px 0; padding: 10px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 5px; text-align: left; border: 1px solid #ddd; }
+        th { background: #f5f5f5; }
+        .online { color: green; }
+        .offline { color: red; }
+        .stats { display: flex; justify-content: space-between; }
+        .stat { text-align: center; }
+        .timestamp { color: #666; font-size: 12px; }
+        @media (max-width: 600px) { .stats { flex-direction: column; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>WireGuard Monitor Lite</h1>
+            <div class="timestamp" id="timestamp">Загрузка...</div>
+        </header>
+        
+        <div class="card">
+            <h2>📊 Трафик сервера</h2>
+            <div class="stats">
+                <div class="stat">
+                    <div>Получено (RX):</div>
+                    <div id="traffic-rx">0 B</div>
+                </div>
+                <div class="stat">
+                    <div>Отправлено (TX):</div>
+                    <div id="traffic-tx">0 B</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>👥 Клиенты (<span id="client-count">0</span>)</h2>
+            <div class="table-container">
+                <table id="clients-table">
+                    <thead>
+                        <tr>
+                            <th>Имя</th>
+                            <th>IP</th>
+                            <th>Статус</th>
+                            <th>Трафик</th>
+                        </tr>
+                    </thead>
+                    <tbody id="clients-body">
+                        <!-- Данные загружаются через JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>⚙️ Быстрые команды</h2>
+            <button onclick="loadData()">🔄 Обновить</button>
+            <button onclick="location.href='/'">📱 Полная версия</button>
+            <button onclick="clearCache()">🧹 Очистить кэш</button>
+        </div>
+        
+        <footer class="timestamp">
+            WireGuard Monitor Lite v1.0 | Память: <span id="memory-usage">-</span>
+        </footer>
+    </div>
+
+    <script>
+        async function loadData() {
+            try {
+                const [traffic, clients] = await Promise.all([
+                    fetch('/cgi-bin/get_server_traffic.sh?period=today').then(r => r.json()),
+                    fetch('/cgi-bin/get_wg_clients.sh').then(r => r.json())
+                ]);
+                
+                // Обновляем трафик
+                document.getElementById('traffic-rx').textContent = traffic.rx || '0 B';
+                document.getElementById('traffic-tx').textContent = traffic.tx || '0 B';
+                
+                // Обновляем клиентов
+                const tbody = document.getElementById('clients-body');
+                tbody.innerHTML = clients.map(client => `
+                    <tr>
+                        <td>${escapeHtml(client.name || 'Unknown')}</td>
+                        <td><code>${escapeHtml(client.ip || 'N/A')}</code></td>
+                        <td class="${client.last_handshake === 'Never' ? 'offline' : 'online'}">
+                            ${client.last_handshake === 'Never' ? '❌' : '✅'}
+                        </td>
+                        <td>⬇${client.transfer_rx || '0'} ⬆${client.transfer_tx || '0'}</td>
+                    </tr>
+                `).join('');
+                
+                document.getElementById('client-count').textContent = clients.length;
+                document.getElementById('timestamp').textContent = 
+                    `Обновлено: ${new Date().toLocaleTimeString()}`;
+                    
+                updateMemoryUsage();
+                
+            } catch (error) {
+                console.error('Ошибка загрузки:', error);
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function updateMemoryUsage() {
+            if (performance.memory) {
+                const usedMB = (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(1);
+                const totalMB = (performance.memory.totalJSHeapSize / 1024 / 1024).toFixed(1);
+                document.getElementById('memory-usage').textContent = `${usedMB}MB/${totalMB}MB`;
+            }
+        }
+        
+        async function clearCache() {
+            await fetch('/cgi-bin/clear_cache.sh');
+            loadData();
+        }
+        
+        // Автоматическое обновление каждые 60 секунд
+        loadData();
+        setInterval(loadData, 60000);
+        
+        // Обновление памяти каждые 10 секунд
+        setInterval(updateMemoryUsage, 10000);
+    </script>
+</body>
+</html>
