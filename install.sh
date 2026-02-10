@@ -170,10 +170,28 @@ EOF
 setup_nginx() {
     print_status "Настройка Nginx..."
     
+    # Создаем отдельный файл для log_format
+    LOG_FORMAT_FILE="/etc/nginx/conf.d/log-format.conf"
+    cat > "$LOG_FORMAT_FILE" << 'EOF'
+log_format json_log escape=json '{"time":"$time_local",'
+                                '"remote_addr":"$remote_addr",'
+                                '"remote_user":"$remote_user",'
+                                '"request":"$request",'
+                                '"status":"$status",'
+                                '"body_bytes_sent":"$body_bytes_sent",'
+                                '"request_time":"$request_time",'
+                                '"http_referrer":"$http_referer",'
+                                '"http_user_agent":"$http_user_agent"}';
+EOF
+    
     NGINX_CONF="/etc/nginx/sites-available/wg-monitor"
     
-    # Копирование конфигурации
+    # Копирование конфигурации (без директивы log_format внутри server)
     cp config/nginx-wg-monitor.conf "$NGINX_CONF"
+    
+    # Создаем директории для логов и кэша
+    mkdir -p /var/www/wg-monitor/logs /var/cache/nginx/wg
+    chown -R www-data:www-data /var/www/wg-monitor/logs /var/cache/nginx
     
     # Активация сайта
     ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/
@@ -186,6 +204,7 @@ setup_nginx() {
     # Проверка конфигурации
     if nginx -t; then
         print_success "Конфигурация Nginx проверена"
+        systemctl reload nginx
     else
         print_error "Ошибка в конфигурации Nginx"
         exit 1
